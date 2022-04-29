@@ -1,10 +1,8 @@
 #include <Notecard.h>
 
 #define serialDebug Serial
-#define productUID "YOUR_VALUE_HERE"
+#define productUID "YOUR VALUE HERE"
 #define BUTTON_PIN USER_BTN
-#define SMS_FROM "YOUR_VALUE_HERE"
-#define SMS_TO "YOUR_VALUE_HERE"
 
 Notecard notecard;
 bool locationRequested = false;
@@ -28,7 +26,7 @@ void setup() {
 
   J *req2 = notecard.newRequest("card.location.mode");
   JAddStringToObject(req2, "mode", "periodic");
-  JAddNumberToObject(req2, "seconds", 60);
+  JAddNumberToObject(req2, "seconds", 300);
   notecard.sendRequest(req2);
 
   J *req3 = notecard.newRequest("card.location.track");
@@ -44,43 +42,44 @@ void setup() {
 }
 
 void loop() {
-  if (locationRequested) {
-    J *req = notecard.newRequest("card.location");
-    J *resp = notecard.requestAndResponse(req);
-    serialDebug.println("Location:");
-    double lat = JGetNumber(resp, "lat");
-    double lon = JGetNumber(resp, "lon");
-    serialDebug.println(lat, 10);
-    serialDebug.println(lon, 10);
-
-    if (lat == 0) {
-      serialDebug.println("The Notecard does not yet have a location");
-      // Wait a minute before trying again.
-      delay(1000 * 60);
-    } else {
-      // http://maps.google.com/maps?q=<lat>,<lon>
-      char buffer[100];
-      snprintf(
-        buffer,
-        sizeof(buffer),
-        "Your kids are requesting you. https://maps.google.com/maps?q=%.8lf,%.8lf",
-        lat,
-        lon
-       );
-      serialDebug.println(buffer);
-
-      J *req2 = notecard.newRequest("note.add");
-      JAddStringToObject(req2, "file", "twilio.qo");
-      JAddBoolToObject(req2, "sync", true);
-      J *body = JCreateObject();
-      JAddStringToObject(body, "body", buffer);
-      JAddStringToObject(body, "from", SMS_FROM);
-      JAddStringToObject(body, "to", SMS_TO);
-      JAddItemToObject(req2, "body", body);
-      notecard.sendRequest(req2);
-  
-      locationRequested = false;
-      serialDebug.println("Location sent successfully.");
-    }
+  if (!locationRequested) {
+    return;
   }
+
+  J *req = notecard.newRequest("card.location");
+  J *resp = notecard.requestAndResponse(req);
+  serialDebug.println("Location:");
+  double lat = JGetNumber(resp, "lat");
+  double lon = JGetNumber(resp, "lon");
+  serialDebug.println(lat, 10);
+  serialDebug.println(lon, 10);
+
+  if (lat == 0) {
+    serialDebug.println("The Notecard does not yet have a location");
+    // Wait a minute before trying again.
+    delay(1000 * 60);
+    return;
+  }
+
+  // http://maps.google.com/maps?q=<lat>,<lon>
+  char buffer[100];
+  snprintf(
+    buffer,
+    sizeof(buffer),
+    "Your kids are requesting you. https://maps.google.com/maps?q=%.8lf,%.8lf",
+    lat,
+    lon
+   );
+  serialDebug.println(buffer);
+
+  J *req2 = notecard.newRequest("note.add");
+  JAddStringToObject(req2, "file", "twilio.qo");
+  JAddBoolToObject(req2, "sync", true);
+  J *body = JCreateObject();
+  JAddStringToObject(body, "message", buffer);
+  JAddItemToObject(req2, "body", body);
+  notecard.sendRequest(req2);
+
+  locationRequested = false;
+  serialDebug.println("Location sent successfully.");
 }
