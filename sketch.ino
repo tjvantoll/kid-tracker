@@ -1,32 +1,41 @@
 #include <Notecard.h>
 
 #define serialDebug Serial
-#define productUID "YOUR VALUE HERE"
+#define productUID "com.blues.tj:kidtracker"
 #define BUTTON_PIN USER_BTN
+// Set this to 1 to disable debugging logs
+#define NDEBUG 0
+
+#ifndef ARDUINO_SWAN_R5
+#error "This program was designed to run on the Blues Wireless Swan"
+#endif
 
 Notecard notecard;
-bool locationRequested = false;
+volatile bool locationRequested = false;
 
 void ISR(void) {
-  serialDebug.println("Button pressed");
+  notecard.logDebug("Button pressed\n");
   locationRequested = true;
 }
 
-void setup() {
+void setup() {  
   serialDebug.begin(115200);
-
   notecard.begin();
-  notecard.setDebugOutputStream(serialDebug);
+
+  #if !NDEBUG
+    notecard.setDebugOutputStream(serialDebug);
+  #endif
  
   J *req1 = notecard.newRequest("hub.set");
   JAddStringToObject(req1, "product", productUID);
   JAddStringToObject(req1, "mode", "periodic");
   JAddNumberToObject(req1, "outbound", 5);
   notecard.sendRequest(req1);
+  // TODO: Check response of these things
 
   J *req2 = notecard.newRequest("card.location.mode");
   JAddStringToObject(req2, "mode", "periodic");
-  JAddNumberToObject(req2, "seconds", 300);
+  JAddNumberToObject(req2, "seconds", 180);
   notecard.sendRequest(req2);
 
   J *req3 = notecard.newRequest("card.location.track");
@@ -38,7 +47,7 @@ void setup() {
   pinMode(BUTTON_PIN, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), ISR, FALLING);
 
-  serialDebug.println("Setup complete");
+  notecard.logDebug("Setup complete\n");
 }
 
 void loop() {
@@ -48,14 +57,12 @@ void loop() {
 
   J *req = notecard.newRequest("card.location");
   J *resp = notecard.requestAndResponse(req);
-  serialDebug.println("Location:");
   double lat = JGetNumber(resp, "lat");
   double lon = JGetNumber(resp, "lon");
-  serialDebug.println(lat, 10);
-  serialDebug.println(lon, 10);
+  notecard.logDebugf("Location: %.12lf, %.12lf\n", lat, lon);
 
   if (lat == 0) {
-    serialDebug.println("The Notecard does not yet have a location");
+    notecard.logDebug("The Notecard does not yet have a location\n");
     // Wait a minute before trying again.
     delay(1000 * 60);
     return;
@@ -66,11 +73,11 @@ void loop() {
   snprintf(
     buffer,
     sizeof(buffer),
-    "Your kids are requesting you. https://maps.google.com/maps?q=%.8lf,%.8lf",
+    "Your kids are requesting you. https://maps.google.com/maps?q=%.12lf,%.12lf",
     lat,
     lon
    );
-  serialDebug.println(buffer);
+  notecard.logDebug(buffer);
 
   J *req2 = notecard.newRequest("note.add");
   JAddStringToObject(req2, "file", "twilio.qo");
@@ -81,5 +88,5 @@ void loop() {
   notecard.sendRequest(req2);
 
   locationRequested = false;
-  serialDebug.println("Location sent successfully.");
+  notecard.logDebug("Location sent successfully.\n");
 }
