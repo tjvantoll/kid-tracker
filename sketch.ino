@@ -30,19 +30,24 @@ void setup() {
   JAddStringToObject(req1, "product", productUID);
   JAddStringToObject(req1, "mode", "periodic");
   JAddNumberToObject(req1, "outbound", 5);
-  notecard.sendRequest(req1);
-  // TODO: Check response of these things
+  if (!notecard.sendRequest(req1)) {
+    JDelete(req1);
+  }
 
   J *req2 = notecard.newRequest("card.location.mode");
   JAddStringToObject(req2, "mode", "periodic");
   JAddNumberToObject(req2, "seconds", 180);
-  notecard.sendRequest(req2);
+  if (!notecard.sendRequest(req2)) {
+    JDelete(req2);
+  }
 
   J *req3 = notecard.newRequest("card.location.track");
   JAddBoolToObject(req3, "start", true);
   JAddBoolToObject(req3, "heartbeat", true);
   JAddNumberToObject(req3, "hours", 12);
-  notecard.sendRequest(req3);
+  if (!notecard.sendRequest(req3)) {
+    JDelete(req3);
+  }
 
   pinMode(BUTTON_PIN, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), ISR, FALLING);
@@ -85,7 +90,9 @@ void loop() {
   J *body = JCreateObject();
   JAddStringToObject(body, "message", buffer);
   JAddItemToObject(req2, "body", body);
-  notecard.sendRequest(req2);
+  if (!notecard.sendRequest(req2)) {
+    JDelete(req2);
+  }
 
   locationRequested = false;
   notecard.logDebug("Location sent successfully.\n");
