@@ -55,23 +55,8 @@ void setup() {
   notecard.logDebug("Setup complete\n");
 }
 
-void loop() {
-  if (!locationRequested) {
-    return;
-  }
-
-  J *req = notecard.newRequest("card.location");
-  J *resp = notecard.requestAndResponse(req);
-  double lat = JGetNumber(resp, "lat");
-  double lon = JGetNumber(resp, "lon");
+void sendMessage(double lat, double lon) {
   notecard.logDebugf("Location: %.12lf, %.12lf\n", lat, lon);
-
-  if (lat == 0) {
-    notecard.logDebug("The Notecard does not yet have a location\n");
-    // Wait a minute before trying again.
-    delay(1000 * 60);
-    return;
-  }
 
   // http://maps.google.com/maps?q=<lat>,<lon>
   char buffer[100];
@@ -84,16 +69,84 @@ void loop() {
    );
   notecard.logDebug(buffer);
 
-  J *req2 = notecard.newRequest("note.add");
-  JAddStringToObject(req2, "file", "twilio.qo");
-  JAddBoolToObject(req2, "sync", true);
+  J *req = notecard.newRequest("note.add");
+  JAddStringToObject(req, "file", "twilio.qo");
+  JAddBoolToObject(req, "sync", true);
   J *body = JCreateObject();
   JAddStringToObject(body, "message", buffer);
-  JAddItemToObject(req2, "body", body);
-  if (!notecard.sendRequest(req2)) {
-    JDelete(req2);
+  JAddItemToObject(req, "body", body);
+  if (!notecard.sendRequest(req)) {
+    JDelete(req);
   }
 
-  locationRequested = false;
   notecard.logDebug("Location sent successfully.\n");
+}
+
+void loop() {
+  if (!locationRequested) {
+    return;
+  }
+
+  size_t gps_time_s;
+  
+  {
+    // Save the time from the last location reading.
+    J *rsp = notecard.requestAndResponse(notecard.newRequest("card.location"));
+    gps_time_s = JGetInt(rsp, "time");
+    NoteDeleteResponse(rsp);
+  }
+
+  {
+    // Set the location mode to "continuous" mode to force the
+    // Notecard to take an immediate GPS/GNSS reading.
+    J *req = notecard.newRequest("card.location.mode");
+    JAddStringToObject(req, "mode", "continuous");
+    notecard.sendRequest(req);
+  }
+
+  // How many seconds to wait for a location before you stop looking
+  size_t timeout_s = 300;
+  
+  // Block while resolving GPS/GNSS location
+  for (const size_t start_ms = ::millis();;) {
+    // Check for a timeout, and if enough time has passed, break out of the loop
+    // to avoid looping forever    
+    if (::millis() >= (start_ms + (timeout_s * 1000))) {
+      notecard.logDebug("Timed out looking for a location\n");
+      locationRequested = false;
+      break;
+    }
+  
+    // Check if GPS/GNSS has acquired location information
+    J *rsp = notecard.requestAndResponse(notecard.newRequest("card.location"));
+    if (JGetInt(rsp, "time") != gps_time_s) {
+      double lat = JGetNumber(rsp, "lat");
+      double lon = JGetNumber(rsp, "lon");
+      sendMessage(lat, lon);
+      NoteDeleteResponse(rsp);
+
+      // Restore previous configuration
+      {
+        J *req = notecard.newRequest("card.location.mode");
+        JAddStringToObject(req, "mode", "periodic");
+        notecard.sendRequest(req);
+      }
+
+      locationRequested = false;
+      break;
+    }
+  
+    // If a "stop" field is on the card.location response, it means the Notecard
+    // cannot locate a GPS/GNSS signal, so we break out of the loop to avoid looping
+    // endlessly
+    if (JGetObjectItem(rsp, "stop")) {
+      notecard.logDebug("Found a stop flag, cannot find location\n");
+      locationRequested = false;
+      break;
+    }
+  
+    NoteDeleteResponse(rsp);
+    // Wait 2 seconds before trying again
+    delay(2000);
+  }
 }
