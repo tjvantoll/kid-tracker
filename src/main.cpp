@@ -1,13 +1,14 @@
+#include <Arduino.h>
 #include <Notecard.h>
 
 #define serialDebug Serial
 #define productUID "com.blues.tj:kidtracker"
 #define BUTTON_PIN USER_BTN
 // Set this to 1 to disable debugging logs
-#define NDEBUG 0
+#define RELEASE 0
 
 #ifndef ARDUINO_SWAN_R5
-#error "This program was designed to run on the Blues Wireless Swan"
+#error "This program was designed to run on the Blues Swan"
 #endif
 
 Notecard notecard;
@@ -18,25 +19,30 @@ void ISR(void) {
   locationRequested = true;
 }
 
-void setup() {  
-  serialDebug.begin(115200);
-  notecard.begin();
-
-  #if !NDEBUG
+void setup() {
+  #if !RELEASE
+    static const size_t MAX_SERIAL_WAIT_MS = 5000;
+    size_t begin_serial_wait_ms = ::millis();
+    // Wait for the serial port to become available
+    while (!serialDebug && (MAX_SERIAL_WAIT_MS > (::millis() - begin_serial_wait_ms)));
+    serialDebug.begin(115200);
     notecard.setDebugOutputStream(serialDebug);
   #endif
- 
+
+  notecard.begin();
+
   J *req1 = notecard.newRequest("hub.set");
   JAddStringToObject(req1, "product", productUID);
   JAddStringToObject(req1, "mode", "periodic");
-  JAddNumberToObject(req1, "outbound", 5);
+  JAddNumberToObject(req1, "inbound", 60);
+  JAddNumberToObject(req1, "outbound", 10);
   if (!notecard.sendRequest(req1)) {
     JDelete(req1);
   }
 
   J *req2 = notecard.newRequest("card.location.mode");
   JAddStringToObject(req2, "mode", "periodic");
-  JAddNumberToObject(req2, "seconds", 180);
+  JAddNumberToObject(req2, "seconds", 500);
   if (!notecard.sendRequest(req2)) {
     JDelete(req2);
   }
@@ -70,7 +76,7 @@ void sendMessage(double lat, double lon) {
   notecard.logDebug(buffer);
 
   J *req = notecard.newRequest("note.add");
-  JAddStringToObject(req, "file", "twilio.qo");
+  JAddStringToObject(req, "file", "alert.qo");
   JAddBoolToObject(req, "sync", true);
   J *body = JCreateObject();
   JAddStringToObject(body, "message", buffer);
@@ -105,12 +111,12 @@ void loop() {
   }
 
   // How many seconds to wait for a location before you stop looking
-  size_t timeout_s = 300;
-  
+  size_t timeout_s = 600;
+
   // Block while resolving GPS/GNSS location
   for (const size_t start_ms = ::millis();;) {
     // Check for a timeout, and if enough time has passed, break out of the loop
-    // to avoid looping forever    
+    // to avoid looping forever
     if (::millis() >= (start_ms + (timeout_s * 1000))) {
       notecard.logDebug("Timed out looking for a location\n");
       locationRequested = false;
