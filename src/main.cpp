@@ -5,7 +5,8 @@
 #define productUID "com.blues.tj:kidtracker"
 #define BUTTON_PIN USER_BTN
 // Set this to 1 to disable debugging logs
-#define RELEASE 0
+#define RELEASE 1
+#define VERSION_NUMBER "1.1.0"
 
 #ifndef ARDUINO_SWAN_R5
 #error "This program was designed to run on the Blues Swan"
@@ -31,28 +32,71 @@ void setup() {
 
   notecard.begin();
 
-  J *req1 = notecard.newRequest("hub.set");
-  JAddStringToObject(req1, "product", productUID);
-  JAddStringToObject(req1, "mode", "periodic");
-  JAddNumberToObject(req1, "inbound", 60);
-  JAddNumberToObject(req1, "outbound", 10);
-  if (!notecard.sendRequest(req1)) {
-    JDelete(req1);
+  {
+    J *req = notecard.newRequest("hub.set");
+    JAddStringToObject(req, "product", productUID);
+    JAddStringToObject(req, "mode", "periodic");
+    JAddNumberToObject(req, "inbound", 60 * 12);
+    JAddNumberToObject(req, "outbound", 30);
+    if (!notecard.sendRequest(req)) {
+      JDelete(req);
+    }
   }
 
-  J *req2 = notecard.newRequest("card.location.mode");
-  JAddStringToObject(req2, "mode", "periodic");
-  JAddNumberToObject(req2, "seconds", 500);
-  if (!notecard.sendRequest(req2)) {
-    JDelete(req2);
+  {
+    // Notify Notehub of the current firmware version
+    J *req = notecard.newRequest("dfu.status");
+    JAddStringToObject(req, "version", VERSION_NUMBER);
+    if (!notecard.sendRequest(req)) {
+      JDelete(req);
+    }
   }
 
-  J *req3 = notecard.newRequest("card.location.track");
-  JAddBoolToObject(req3, "start", true);
-  JAddBoolToObject(req3, "heartbeat", true);
-  JAddNumberToObject(req3, "hours", 12);
-  if (!notecard.sendRequest(req3)) {
-    JDelete(req3);
+  {
+    // Enable Notecard Outboard Firmware Update
+    J *req = notecard.newRequest("card.dfu");
+    JAddBoolToObject(req, "on", true);
+    JAddStringToObject(req, "name", "stm32");
+    if (!notecard.sendRequest(req)) {
+      JDelete(req);
+    }
+  }
+
+  {
+    // Add temperature monitoring
+    J *req = notecard.newRequest("card.temp");
+    JAddNumberToObject(req, "minutes", 60);
+    if (!notecard.sendRequest(req)) {
+      JDelete(req);
+    }
+  }
+
+  {
+    // Pull AUX1 low during DFU
+    J *req = notecard.newRequest("card.aux");
+    JAddStringToObject(req, "mode", "dfu");
+    if (!notecard.sendRequest(req)) {
+      JDelete(req);
+    }
+  }
+
+  {
+    J *req = notecard.newRequest("card.location.mode");
+    JAddStringToObject(req, "mode", "periodic");
+    JAddNumberToObject(req, "seconds", 60 * 5);
+    if (!notecard.sendRequest(req)) {
+      JDelete(req);
+    }
+  }
+
+  {
+    J *req = notecard.newRequest("card.location.track");
+    JAddBoolToObject(req, "start", true);
+    JAddBoolToObject(req, "heartbeat", true);
+    JAddNumberToObject(req, "hours", 12);
+    if (!notecard.sendRequest(req)) {
+      JDelete(req);
+    }
   }
 
   pinMode(BUTTON_PIN, INPUT_PULLUP);
