@@ -5,8 +5,53 @@
 #define productUID "com.blues.tj:kidtracker"
 #define BUTTON_PIN USER_BTN
 // Set this to 1 to disable debugging logs
-#define RELEASE 1
-#define VERSION_NUMBER "1.1.0"
+#define RELEASE 0
+
+// C Helpers to convert a number to a string
+#define STRINGIFY(x) STRINGIFY_(x)
+#define STRINGIFY_(x) #x
+
+// Definitions used by firmware update
+#define PRODUCT_ORG_NAME      "tvantoll"
+#define PRODUCT_DISPLAY_NAME  "Kid Tracker"
+#define PRODUCT_FIRMWARE_ID   "kid-tracker-firmware"
+#define PRODUCT_DESC          "Custom GPS/GNSS tracker for kids"
+#define PRODUCT_MAJOR         1
+#define PRODUCT_MINOR         1
+#define PRODUCT_PATCH         2
+#define PRODUCT_BUILD         0
+#define PRODUCT_BUILT         __DATE__ " " __TIME__
+#define PRODUCT_BUILDER       ""
+#define PRODUCT_VERSION       STRINGIFY(PRODUCT_MAJOR) "." STRINGIFY(PRODUCT_MINOR) "." STRINGIFY(PRODUCT_PATCH)
+
+// This is a product configuration JSON structure that enables the Notehub to recognize this
+// firmware when it's uploaded, to help keep track of versions and so we only ever download
+// firmware builds that are appropriate for this device.
+#define QUOTE(x) "\"" x "\""
+#define FIRMWARE_VERSION_HEADER "firmware::info:"
+#define FIRMWARE_VERSION FIRMWARE_VERSION_HEADER         \
+    "{" QUOTE("org") ":" QUOTE(PRODUCT_ORG_NAME)         \
+    "," QUOTE("product") ":" QUOTE(PRODUCT_DISPLAY_NAME) \
+    "," QUOTE("description") ":" QUOTE(PRODUCT_DESC)     \
+    "," QUOTE("firmware") ":" QUOTE(PRODUCT_FIRMWARE_ID) \
+    "," QUOTE("version") ":" QUOTE(PRODUCT_VERSION)      \
+    "," QUOTE("built") ":" QUOTE(PRODUCT_BUILT)          \
+    "," QUOTE("ver_major") ":" STRINGIFY(PRODUCT_MAJOR)  \
+    "," QUOTE("ver_minor") ":" STRINGIFY(PRODUCT_MINOR)  \
+    "," QUOTE("ver_patch") ":" STRINGIFY(PRODUCT_PATCH)  \
+    "," QUOTE("ver_build") ":" STRINGIFY(PRODUCT_BUILD)  \
+    "," QUOTE("builder") ":" QUOTE(PRODUCT_BUILDER)      \
+    "}"
+
+const char *productVersion() {
+    return ("Ver " PRODUCT_VERSION " " PRODUCT_BUILT);
+}
+
+// Return the firmware's version, which is both stored within the image and which is verified by DFU
+const char *firmwareVersion() {
+    return &FIRMWARE_VERSION[sizeof(FIRMWARE_VERSION_HEADER)-1];
+}
+
 
 #ifndef ARDUINO_SWAN_R5
 #error "This program was designed to run on the Blues Swan"
@@ -37,7 +82,7 @@ void setup() {
     JAddStringToObject(req, "product", productUID);
     JAddStringToObject(req, "mode", "periodic");
     JAddNumberToObject(req, "inbound", 60 * 12);
-    JAddNumberToObject(req, "outbound", 30);
+    JAddNumberToObject(req, "outbound", 10);
     if (!notecard.sendRequest(req)) {
       JDelete(req);
     }
@@ -46,7 +91,7 @@ void setup() {
   {
     // Notify Notehub of the current firmware version
     J *req = notecard.newRequest("dfu.status");
-    JAddStringToObject(req, "version", VERSION_NUMBER);
+    JAddStringToObject(req, "version", firmwareVersion());
     if (!notecard.sendRequest(req)) {
       JDelete(req);
     }
@@ -83,7 +128,7 @@ void setup() {
   {
     J *req = notecard.newRequest("card.location.mode");
     JAddStringToObject(req, "mode", "periodic");
-    JAddNumberToObject(req, "seconds", 60 * 5);
+    JAddNumberToObject(req, "seconds", 60 * 2);
     if (!notecard.sendRequest(req)) {
       JDelete(req);
     }
